@@ -1,0 +1,14 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Run Server Bot",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "bot_server",
+            "cwd": "${workspaceFolder}",
+            "envFile": "${workspaceFolder}/.env",
+            "console": "integratedTerminal"
+        }
+    ]
+}

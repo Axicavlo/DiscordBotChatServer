@@ -1,0 +1,19 @@
+[Unit]
+Description=Discord Bot Chat service
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+StateDirectory=discord-bot-chat
+StateDirectoryMode=0700
+WorkingDirectory=/opt/discord-bot-chat
+EnvironmentFile=/etc/discord-bot-chat.env
+ExecStart=/opt/discord-bot-chat/.venv/bin/python -m bot_server
+Restart=on-failure
+RestartSec=5
+RestartPreventExitStatus=2
+
+[Install]
+WantedBy=multi-user.target
