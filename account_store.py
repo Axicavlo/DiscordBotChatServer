@@ -60,7 +60,7 @@ class Accounts:
 
     def insert_api_request_logs(self, rows):
         with psycopg.connect(
-            **self.settings, connect_timeout=3, options="-c statement_timeout=3000",
+            **(self.settings | {"connect_timeout": 3}), options="-c statement_timeout=3000",
         ) as connection:
             with connection.cursor() as cursor:
                 cursor.executemany(
