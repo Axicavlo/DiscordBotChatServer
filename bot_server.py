@@ -7,6 +7,7 @@ from pathlib import Path
 import signal
 
 from chatbot_core import Bridge, safe_error
+from server_api import start_api
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ class ServerEvents:
             logger.warning("%s", payload)
 
 
-async def run_bot(token, state_dir):
+async def run_bot(token, state_dir, api_key=""):
     loop = asyncio.get_running_loop()
     bridge = Bridge(ServerEvents(), state_dir=state_dir)
     bridge.worker_loop = loop
@@ -30,7 +31,12 @@ async def run_bot(token, state_dir):
         loop.add_signal_handler(signal.SIGTERM, asyncio.current_task().cancel)
     try:
         async with bridge:
-            await bridge.start(token)
+            api = await start_api(bridge, api_key) if api_key else None
+            try:
+                await bridge.start(token)
+            finally:
+                if api is not None:
+                    await api.cleanup()
     finally:
         if os.name != "nt":
             loop.remove_signal_handler(signal.SIGTERM)
@@ -45,7 +51,8 @@ def main():
 
     state_dir = os.environ.get("STATE_DIRECTORY") or Path.home() / ".discord-bot-server"
     try:
-        asyncio.run(run_bot(token, state_dir))
+        api_key = os.environ.get("CHATBOT_API_KEY", "").strip()
+        asyncio.run(run_bot(token, state_dir, api_key))
     except (KeyboardInterrupt, asyncio.CancelledError):
         logger.info("Discord bot stopped")
     except RuntimeError as exc:

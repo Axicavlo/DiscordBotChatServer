@@ -47,3 +47,16 @@ VS Code의 **실행 및 디버그**에서 **Run Server Bot**을 선택한 뒤 **
 ## OCI에서 systemd로 실행할 때
 
 서비스의 토큰 파일은 `/etc/discord-bot-chat.env`입니다. 위와 같은 `DISCORD_BOT_TOKEN=값` 형식으로 서버에서 설정하고, 관리자만 읽을 수 있도록 파일 권한을 설정합니다. 서비스 설정과 Ubuntu 실행 조건은 [README](README.md)와 [systemd 서비스 파일](deploy/discord-bot.service)에서 확인할 수 있습니다.
+
+
+## Windows 조회 API 연결
+
+봇과 함께 읽기 전용 API를 실행하려면 서버의 `/etc/discord-bot-chat.env`에 `CHATBOT_API_KEY=값`을 추가하고 서비스를 재시작합니다. 값은 Discord 봇 토큰과 별도로 생성한 무작위 키를 사용합니다. Windows 앱에는 이 키를 입력합니다.
+
+API는 서버의 `127.0.0.1:8765`에서만 대기합니다. Windows PowerShell에서 평소 쓰는 SSH 키와 OCI 공인 IP를 넣어 로컬 포트 포워딩을 실행합니다.
+
+```powershell
+ssh -N -L 127.0.0.1:8765:127.0.0.1:8765 -i "<SSH 키 경로>" ubuntu@<OCI 공인 IP>
+```
+
+SSH 창을 열어둔 채 Windows 앱에서 서버 주소를 `http://127.0.0.1:8765`로 설정합니다. 앱 접속 키를 입력하고 서버 및 채널을 선택하면 최근 메시지 최대 100개를 확인할 수 있습니다.

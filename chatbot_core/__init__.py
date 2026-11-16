@@ -185,20 +185,26 @@ class Bridge(discord.Client):
         guild = self.get_guild(guild_id)
         if guild is None or guild.me is None:
             raise RuntimeError("서버 정보를 가져올 수 없습니다. 새로고침하세요.")
-        rows = [
+        self.events.put(("channels", guild_id, self.visible_channels(guild)))
+
+    @staticmethod
+    def visible_channels(guild):
+        return [
             (c.id, f'{c.category.name + " / " if c.category else ""}#{c.name}')
             for c in guild.text_channels
             if c.permissions_for(guild.me).view_channel
         ]
-        self.events.put(("channels", guild_id, rows))
 
     async def history(self, channel_id):
         channel = self.get_channel(channel_id)
         if channel is None:
             raise RuntimeError("채널에 접근할 수 없습니다.")
+        self.events.put(("history", channel_id, await self.recent_messages(channel)))
+
+    async def recent_messages(self, channel):
         rows = [m async for m in channel.history(limit=100)]
         await self.prepare_member_names(rows)
-        self.events.put(("history", channel_id, list(reversed(rows))))
+        return list(reversed(rows))
 
     async def send_text(self, channel_id, text, reply_id=None):
         channel = self.get_channel(channel_id)
