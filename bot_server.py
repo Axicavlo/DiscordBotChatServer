@@ -14,8 +14,29 @@ logger = logging.getLogger(__name__)
 
 
 class ServerEvents:
+    def __init__(self):
+        self.subscribers = set()
+
+    def subscribe(self):
+        queue = asyncio.Queue(maxsize=256)
+        self.subscribers.add(queue)
+        return queue
+
+    def unsubscribe(self, queue):
+        self.subscribers.discard(queue)
+
     def put(self, event):
         kind, _, payload = event
+        if kind in ("message", "deleted", "status", "servers"):
+            if kind == "servers":
+                event = ("resync", None, None)
+            for queue in self.subscribers:
+                if queue.full():
+                    while not queue.empty():
+                        queue.get_nowait()
+                    queue.put_nowait(("resync", None, None))
+                else:
+                    queue.put_nowait(event)
         if kind == "ready":
             logger.info("Discord connection ready")
         elif kind == "status":

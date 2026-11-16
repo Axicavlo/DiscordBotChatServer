@@ -215,7 +215,7 @@ class Bridge(discord.Client):
             reference = discord.MessageReference(
                 message_id=reply_id, channel_id=channel_id, fail_if_not_exists=True
             )
-        await channel.send(
+        message = await channel.send(
             text,
             reference=reference,
             allowed_mentions=discord.AllowedMentions(
@@ -226,6 +226,7 @@ class Bridge(discord.Client):
             ),
         )
         self.events.put(("sent", channel_id, (text, reply_id)))
+        return message
 
     async def own_message(self, channel_id, message_id):
         channel = self.get_channel(channel_id)
@@ -246,6 +247,7 @@ class Bridge(discord.Client):
         await self.prepare_member_names([updated])
         self.events.put(("message", channel_id, updated))
         self.events.put(("edited", channel_id, message_id))
+        return updated
 
     async def delete_message(self, channel_id, message_id):
         message = await self.own_message(channel_id, message_id)
