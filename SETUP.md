@@ -89,3 +89,34 @@ sudo systemctl restart discord-bot.service
 계정 관리 명령은 앱 비밀번호를 두 번 입력받습니다. 비밀번호를 초기화하려면 `create`를 `reset-password`로 바꿉니다. 초기화하면 해당 사용자의 모든 세션이 폐기됩니다.
 
 Windows 로그인은 OCI의 공인 HTTPS 주소를 사용합니다. 계정 로그인과 채널 조회를 확인한 후 필요하면 기존 `CHATBOT_API_KEY` 환경 변수를 제거하고 서비스를 재시작합니다.
+
+
+## 앱 세션과 점검 모드 관리
+
+이 버전을 배포하기 전에 PostgreSQL의 `discordbot`에 [db/001_app_control.sql](db/001_app_control.sql)을 `discordbot_app`으로 적용합니다.
+
+OCI에 SSH로 접속해 아래처럼 명령 목록을 확인합니다.
+
+```bash
+cd /opt/discord-bot-chat
+.venv/bin/python manage_users.py --help
+.venv/bin/python manage_users.py maintenance --help
+```
+
+DB 접속 환경을 읽어 관리자 명령을 실행하려면 다음을 사용합니다. 예시는 현재 점검 상태를 조회합니다.
+
+```bash
+sudo systemd-run --quiet --wait --pipe --collect --uid=ubuntu \
+  --property=EnvironmentFile=/etc/discord-bot-chat.env \
+  /opt/discord-bot-chat/.venv/bin/python \
+  /opt/discord-bot-chat/manage_users.py maintenance status
+```
+
+| 마지막 부분 | 동작 |
+| --- | --- |
+| `revoke-all-sessions` | 모든 세션을 폐기합니다. 점검 모드 설정은 유지합니다. |
+| `maintenance on` | 앱 접속을 차단하고 같은 전체 세션 폐기 로직을 한 트랜잭션에서 실행합니다. |
+| `maintenance off` | 앱 접속을 다시 허용합니다. 새로 로그인해야 합니다. |
+| `maintenance status` | 현재 점검 상태를 확인합니다. |
+
+점검 중에는 앱 로그인·채팅 API·WebSocket이 차단됩니다. Discord 슬래시 명령은 계속 사용할 수 있습니다.

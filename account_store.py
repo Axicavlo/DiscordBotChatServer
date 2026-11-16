@@ -31,6 +31,10 @@ def token_hash(token):
     return sha256(token.encode("utf-8")).digest()
 
 
+class MaintenanceActive(Exception):
+    pass
+
+
 class Accounts:
     def __init__(self, settings):
         self.settings = settings
@@ -38,8 +42,47 @@ class Accounts:
     def connect(self):
         return psycopg.connect(**self.settings)
 
+    @staticmethod
+    def read_control(connection, *, lock=False):
+        query = "SELECT maintenance, session_generation FROM bot_auth.app_control WHERE singleton"
+        row = connection.execute(query + (" FOR SHARE" if lock else "")).fetchone()
+        if row is None:
+            raise psycopg.DatabaseError("The app control row is missing")
+        return row
+
+    def control(self):
+        with self.connect() as connection:
+            return self.read_control(connection)
+
+    @staticmethod
+    def _revoke_all_sessions(connection):
+        # Lock the control row against login before deleting any sessions.
+        result = connection.execute(
+            "UPDATE bot_auth.app_control SET session_generation = session_generation + 1 WHERE singleton"
+        )
+        if result.rowcount != 1:
+            raise psycopg.DatabaseError("The app control row is missing")
+        return connection.execute("DELETE FROM bot_auth.app_sessions").rowcount
+
+    def revoke_all_sessions(self):
+        with self.connect() as connection:
+            return self._revoke_all_sessions(connection)
+
+    def set_maintenance(self, enabled):
+        with self.connect() as connection:
+            result = connection.execute(
+                "UPDATE bot_auth.app_control SET maintenance = %s WHERE singleton",
+                (enabled,),
+            )
+            if result.rowcount != 1:
+                raise psycopg.DatabaseError("The app control row is missing")
+            return self._revoke_all_sessions(connection) if enabled else 0
+
     def login(self, username, password):
         with self.connect() as connection:
+            maintenance, _ = self.read_control(connection, lock=True)
+            if maintenance:
+                raise MaintenanceActive()
             row = connection.execute(
                 "SELECT id, password_hash FROM bot_auth.app_users WHERE username = %s FOR SHARE",
                 (username,),

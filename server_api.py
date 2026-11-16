@@ -15,6 +15,7 @@ import discord
 from aiohttp import web
 from psycopg import Error as DatabaseError
 
+from account_store import MaintenanceActive
 from chatbot_core import asset_url, avatar_url, message_view, server_display_name
 
 
@@ -172,6 +173,11 @@ def create_api(bridge, key="", accounts=None):
     def unauthorized():
         return web.HTTPUnauthorized(headers={"WWW-Authenticate": "Bearer", "Cache-Control": "no-store"})
 
+    def maintenance_response():
+        return web.HTTPServiceUnavailable(
+            headers={"X-Maintenance-Mode": "on", "Cache-Control": "no-store"}
+        )
+
     @web.middleware
     async def require_access(request, handler):
         authorization = request.headers.get("Authorization", "")
@@ -185,6 +191,11 @@ def create_api(bridge, key="", accounts=None):
         legacy_get = method == "GET" and not stream_request
 
         try:
+            if accounts is not None:
+                maintenance, generation = await asyncio.to_thread(accounts.control)
+                if maintenance:
+                    raise maintenance_response()
+                request["session_generation"] = generation
             if not login_request:
                 if legacy_get and key and compare_digest(authorization.encode("utf-8"), expected):
                     identity = ("ip", client_ip(request))
@@ -218,6 +229,8 @@ def create_api(bridge, key="", accounts=None):
                     expires_at = await asyncio.to_thread(accounts.extend, token) or expires_at
                 except DatabaseError:
                     logger.warning("Unable to renew an active app session")
+        except MaintenanceActive:
+            raise maintenance_response() from None
         except DatabaseError:
             raise web.HTTPServiceUnavailable() from None
         except discord.Forbidden:
@@ -338,14 +351,14 @@ def create_api(bridge, key="", accounts=None):
             raise web.HTTPForbidden() from None
         return web.Response(status=204)
 
-    sockets = set()
+    sockets = {}
 
     async def stream(request):
         token = request["session_token"]
         socket = web.WebSocketResponse(heartbeat=30, max_msg_size=1024, timeout=3)
         await socket.prepare(request)
         request["upgraded_status"] = socket.status
-        sockets.add(socket)
+        sockets[socket] = request['session_generation']
         queue = bridge.events.subscribe()
 
         async def publish():
@@ -356,7 +369,8 @@ def create_api(bridge, key="", accounts=None):
                     except TimeoutError:
                         event = None
                     if not await asyncio.to_thread(accounts.valid, token):
-                        await socket.close(code=4001, message=b"Session expired")
+                        maintenance, _ = await asyncio.to_thread(accounts.control)
+                        await socket.close(code=4002 if maintenance else 4001)
                         return
                     if event is None:
                         continue
@@ -383,8 +397,33 @@ def create_api(bridge, key="", accounts=None):
             sender.cancel()
             await asyncio.gather(sender, return_exceptions=True)
             bridge.events.unsubscribe(queue)
-            sockets.discard(socket)
+            sockets.pop(socket, None)
         return socket
+
+    async def watch_control(app):
+        async def watch():
+            while True:
+                await asyncio.sleep(1)
+                if not sockets:
+                    continue
+                try:
+                    maintenance, generation = await asyncio.to_thread(accounts.control)
+                except DatabaseError:
+                    continue
+                if maintenance:
+                    targets = tuple(sockets)
+                    code = 4002
+                else:
+                    targets = tuple(socket for socket, accepted in sockets.items() if accepted < generation)
+                    code = 4001
+                await asyncio.gather(*(socket.close(code=code) for socket in targets), return_exceptions=True)
+
+        task = asyncio.create_task(watch())
+        try:
+            yield
+        finally:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
 
     async def close_streams(app):
         await asyncio.gather(*(socket.close(code=1001) for socket in tuple(sockets)), return_exceptions=True)
@@ -396,6 +435,7 @@ def create_api(bridge, key="", accounts=None):
     app = web.Application(middlewares=middlewares, client_max_size=16 * 1024)
     if request_log is not None:
         app.cleanup_ctx.append(request_log.lifecycle)
+        app.cleanup_ctx.append(watch_control)
     app.router.add_post("/api/v1/auth/login", login)
     app.router.add_post("/api/v1/auth/logout", logout)
     app.router.add_get("/api/v1/guilds", guilds)
