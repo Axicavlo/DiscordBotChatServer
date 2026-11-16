@@ -56,15 +56,28 @@ class Accounts:
                    VALUES (%s, %s, clock_timestamp() + interval '1 hour')""",
                 (row[0], token_hash(token)),
             )
-            return token
+            return token, row[0]
+
+    def insert_api_request_logs(self, rows):
+        with psycopg.connect(
+            **self.settings, connect_timeout=3, options="-c statement_timeout=3000",
+        ) as connection:
+            with connection.cursor() as cursor:
+                cursor.executemany(
+                    """INSERT INTO bot_log.api_request_log
+                       (requested_at, request_id, method, route, status_code, duration_ms, app_user_id)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                    rows,
+                )
 
     def session(self, token):
         with self.connect() as connection:
-            return connection.execute(
+            row = connection.execute(
                 """SELECT user_id, expires_at FROM bot_auth.app_sessions
                    WHERE token_hash = %s AND expires_at > clock_timestamp()""",
                 (token_hash(token),),
             ).fetchone()
+            return row
 
     def valid(self, token):
         return self.session(token) is not None
