@@ -50,6 +50,7 @@ def create_api(bridge, key="", accounts=None):
     async def require_access(request, handler):
         authorization = request.headers.get("Authorization", "")
         token = ""
+        expires_at = None
         path = request.path
         method = request.method
         logout_request = path == "/api/v1/auth/logout" and method == "POST"
@@ -63,8 +64,10 @@ def create_api(bridge, key="", accounts=None):
                     pass
                 elif accounts is not None and re.fullmatch(r"Bearer [A-Za-z0-9_-]{43}", authorization):
                     token = authorization[7:]
-                    if not await asyncio.to_thread(accounts.valid, token):
+                    session = await asyncio.to_thread(accounts.session, token)
+                    if session is None:
                         raise unauthorized()
+                    _, expires_at = session
                     request["session_token"] = token
                 else:
                     raise unauthorized()
@@ -76,7 +79,7 @@ def create_api(bridge, key="", accounts=None):
             if (token and not stream_request and not logout_request and response.status in (200, 201, 204)
                     and request.headers.get("X-User-Activity") == "1"):
                 try:
-                    await asyncio.to_thread(accounts.extend, token)
+                    expires_at = await asyncio.to_thread(accounts.extend, token) or expires_at
                 except DatabaseError:
                     logger.warning("Unable to renew an active app session")
         except DatabaseError:
@@ -89,6 +92,8 @@ def create_api(bridge, key="", accounts=None):
             raise web.HTTPBadGateway() from None
         if not response.prepared:
             response.headers["Cache-Control"] = "no-store"
+            if expires_at is not None and not logout_request:
+                response.headers["X-Session-Expires-At"] = expires_at.isoformat()
         return response
 
     async def login(request):

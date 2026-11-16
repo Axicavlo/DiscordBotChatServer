@@ -58,23 +58,27 @@ class Accounts:
             )
             return token
 
-    def valid(self, token):
+    def session(self, token):
         with self.connect() as connection:
             return connection.execute(
-                """SELECT 1 FROM bot_auth.app_sessions
+                """SELECT user_id, expires_at FROM bot_auth.app_sessions
                    WHERE token_hash = %s AND expires_at > clock_timestamp()""",
                 (token_hash(token),),
-            ).fetchone() is not None
+            ).fetchone()
+
+    def valid(self, token):
+        return self.session(token) is not None
 
     def extend(self, token):
         with self.connect() as connection:
-            connection.execute(
-                """UPDATE bot_auth.app_sessions AS session
-                   SET expires_at = clock_timestamp() + interval '1 hour'
+            row = connection.execute(
+                """UPDATE bot_auth.app_sessions
+                   SET expires_at = GREATEST(expires_at, clock_timestamp() + interval '1 hour')
                    WHERE token_hash = %s AND expires_at > clock_timestamp()
-                     AND expires_at <= clock_timestamp() + interval '10 minutes'""",
+                   RETURNING expires_at""",
                 (token_hash(token),),
-            )
+            ).fetchone()
+            return row[0] if row is not None else None
 
     def logout(self, token):
         with self.connect() as connection:
