@@ -171,7 +171,7 @@ class Accounts:
         with self.connect() as connection:
             row = connection.execute(
                 """INSERT INTO bot_auth.app_users (username, password_hash)
-                   VALUES (%s, %s) RETURNING user_code""",
+                   VALUES (%s, %s) RETURNING id""",
                 (username, digest),
             ).fetchone()
             return row[0]

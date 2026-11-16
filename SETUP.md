@@ -129,13 +129,13 @@ sudo systemd-run --quiet --wait --pipe --collect --uid=ubuntu \
 
 앱 종료·세션 자동 복원은 기존 세션을 유지하고, 유휴 만료는 로그아웃 요청을 발생시키지 않습니다.
 
-## User codes
+## 계정 ID
 
-Apply [db/003_app_user_codes.sql](db/003_app_user_codes.sql) to the discordbot database
-as the owner of bot_auth.app_users or as a database administrator before deploying
-the new account creation CLI. Apply the migration once.
+PostgreSQL은 Asia/Seoul 기준으로 계정에 YYYYMMNNN 형식의 9자리 ID를 발급합니다.
+월별 순번은 001~999이며, 계정 생성 명령이 ID를 표시합니다. 기존 사용자 이름으로 로그인합니다.
 
-PostgreSQL assigns each account a nine-digit user code (YYYYMMNNN). The month is
-based on Asia/Seoul, and the suffix runs from 001 to 999. Existing accounts are
-numbered by creation time and internal ID within each month. Internal account IDs
-and usernames stay the same. The create command prints the assigned code.
+마이그레이션 003을 적용한 DB는 [db/004_unify_app_user_id.sql](db/004_unify_app_user_id.sql)을 한 번 적용합니다.
+봇 서비스를 중지하고 계정 관리 명령 사용을 멈춘 뒤, DB 소유 역할 또는 관리자로 스크립트 전체를 실행합니다.
+이 SQL은 계정·세션·API 요청 로그·세션 로그의 ID를 함께 변경하고 user_code 컬럼을 제거합니다.
+계정과 연결할 수 없는 로그가 있으면 자동으로 중단합니다.
+SQL 적용을 확인한 후 새 서버 버전을 배포하고 봇 서비스를 시작합니다.

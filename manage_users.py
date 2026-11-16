@@ -51,8 +51,8 @@ def main():
         if password != getpass("Confirm app password: "):
             parser.error("Passwords do not match")
         if args.action == "create":
-            user_code = accounts.create(username, password)
-            print(f"App account created. User code: {user_code}")
+            user_id = accounts.create(username, password)
+            print(f"App account created. User ID: {user_id}")
         elif accounts.reset_password(username, password):
             print("Password changed. Existing sessions were revoked.")
         else:
