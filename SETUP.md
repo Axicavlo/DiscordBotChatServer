@@ -128,3 +128,14 @@ sudo systemd-run --quiet --wait --pipe --collect --uid=ubuntu \
 `bot_log.app_session_log`에는 로그인 성공, 직접 로그아웃, 관리자의 활성 세션 폐기를 기록합니다. 같은 세션의 이벤트는 내부 숫자 `session_id`로 연결할 수 있습니다. 관리자 폐기에는 사유를, 로그인과 로그아웃에는 접속 IP를 기록합니다. 비밀번호와 인증 토큰은 이 테이블에 저장하지 않습니다.
 
 앱 종료·세션 자동 복원은 기존 세션을 유지하고, 유휴 만료는 로그아웃 요청을 발생시키지 않습니다.
+
+## User codes
+
+Apply [db/003_app_user_codes.sql](db/003_app_user_codes.sql) to the discordbot database
+as the owner of bot_auth.app_users or as a database administrator before deploying
+the new account creation CLI. Apply the migration once.
+
+PostgreSQL assigns each account a nine-digit user code (YYYYMMNNN). The month is
+based on Asia/Seoul, and the suffix runs from 001 to 999. Existing accounts are
+numbered by creation time and internal ID within each month. Internal account IDs
+and usernames stay the same. The create command prints the assigned code.

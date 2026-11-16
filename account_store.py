@@ -169,10 +169,12 @@ class Accounts:
     def create(self, username, password):
         digest = PASSWORDS.hash(password)
         with self.connect() as connection:
-            connection.execute(
-                "INSERT INTO bot_auth.app_users (username, password_hash) VALUES (%s, %s)",
+            row = connection.execute(
+                """INSERT INTO bot_auth.app_users (username, password_hash)
+                   VALUES (%s, %s) RETURNING user_code""",
                 (username, digest),
-            )
+            ).fetchone()
+            return row[0]
 
     def reset_password(self, username, password):
         digest = PASSWORDS.hash(password)

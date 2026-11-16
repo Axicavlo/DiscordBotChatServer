@@ -51,8 +51,8 @@ def main():
         if password != getpass("Confirm app password: "):
             parser.error("Passwords do not match")
         if args.action == "create":
-            accounts.create(username, password)
-            print("App account created.")
+            user_code = accounts.create(username, password)
+            print(f"App account created. User code: {user_code}")
         elif accounts.reset_password(username, password):
             print("Password changed. Existing sessions were revoked.")
         else:
@@ -64,8 +64,11 @@ def main():
     except UniqueViolation:
         print("App account already exists.", file=sys.stderr)
         return 1
-    except Error:
-        print("Database operation failed. Check the DB settings and schema.", file=sys.stderr)
+    except Error as error:
+        if error.sqlstate == "P0999":
+            print("Monthly account limit reached (999). Create the account next month.", file=sys.stderr)
+        else:
+            print("Database operation failed. Check the DB settings and schema.", file=sys.stderr)
         return 1
     return 0
 
