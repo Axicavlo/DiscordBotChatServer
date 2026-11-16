@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import signal
 
+from account_store import Accounts, database_settings
 from chatbot_core import Bridge, safe_error
 from server_api import start_api
 
@@ -23,7 +24,7 @@ class ServerEvents:
             logger.warning("%s", payload)
 
 
-async def run_bot(token, state_dir, api_key=""):
+async def run_bot(token, state_dir, api_key="", accounts=None):
     loop = asyncio.get_running_loop()
     bridge = Bridge(ServerEvents(), state_dir=state_dir)
     bridge.worker_loop = loop
@@ -31,7 +32,7 @@ async def run_bot(token, state_dir, api_key=""):
         loop.add_signal_handler(signal.SIGTERM, asyncio.current_task().cancel)
     try:
         async with bridge:
-            api = await start_api(bridge, api_key) if api_key else None
+            api = await start_api(bridge, api_key, accounts) if api_key or accounts else None
             try:
                 await bridge.start(token)
             finally:
@@ -52,7 +53,13 @@ def main():
     state_dir = os.environ.get("STATE_DIRECTORY") or Path.home() / ".discord-bot-server"
     try:
         api_key = os.environ.get("CHATBOT_API_KEY", "").strip()
-        asyncio.run(run_bot(token, state_dir, api_key))
+        accounts = None
+        if os.environ.get("DB_PASSWORD"):
+            try:
+                accounts = Accounts(database_settings())
+            except ValueError:
+                logger.error("Invalid PostgreSQL configuration; account login is disabled")
+        asyncio.run(run_bot(token, state_dir, api_key, accounts))
     except (KeyboardInterrupt, asyncio.CancelledError):
         logger.info("Discord bot stopped")
     except RuntimeError as exc:

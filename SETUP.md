@@ -60,3 +60,32 @@ ssh -N -L 127.0.0.1:8765:127.0.0.1:8765 -i "<SSH 키 경로>" ubuntu@<OCI 공인
 ```
 
 SSH 창을 열어둔 채 Windows 앱에서 서버 주소를 `http://127.0.0.1:8765`로 설정합니다. 앱 접속 키를 입력하고 서버 및 채널을 선택하면 최근 메시지 최대 100개를 확인할 수 있습니다.
+
+## Windows 앱 로그인 (PostgreSQL)
+
+OCI의 `/etc/discord-bot-chat.env`에 아래 항목을 설정합니다. `DB_PASSWORD`는 PostgreSQL의 `discordbot_app` 계정 비밀번호입니다.
+
+```dotenv
+DB_HOST=127.0.0.1
+DB_PORT=5432
+DB_NAME=discordbot
+DB_USER=discordbot_app
+DB_PASSWORD=
+```
+
+DB에는 `bot_auth.app_users`와 `bot_auth.app_sessions`가 있어야 합니다. 세션 토큰의 SHA-256 해시는 32바이트 `bytea`로 저장합니다.
+
+새 의존성을 설치하고 운영 서버에서 서비스 환경을 사용해 앱 계정을 만듭니다.
+
+```bash
+cd /opt/discord-bot-chat
+.venv/bin/python -m pip install -r requirements.txt
+sudo systemd-run --wait --pty --collect --uid=ubuntu \
+  --property=EnvironmentFile=/etc/discord-bot-chat.env \
+  /opt/discord-bot-chat/.venv/bin/python /opt/discord-bot-chat/manage_users.py create --username myname
+sudo systemctl restart discord-bot.service
+```
+
+계정 관리 명령은 앱 비밀번호를 두 번 입력받습니다. 비밀번호를 초기화하려면 `create`를 `reset-password`로 바꿉니다. 초기화하면 해당 사용자의 모든 세션이 폐기됩니다.
+
+Windows 로그인은 OCI의 공인 HTTPS 주소를 사용합니다. 계정 로그인과 채널 조회를 확인한 후 필요하면 기존 `CHATBOT_API_KEY` 환경 변수를 제거하고 서비스를 재시작합니다.
