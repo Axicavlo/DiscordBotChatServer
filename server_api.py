@@ -263,7 +263,7 @@ def create_api(bridge, key="", accounts=None):
         if login_slots.locked():
             raise web.HTTPTooManyRequests()
         async with login_slots:
-            login_result = await asyncio.to_thread(accounts.login, username.strip(), password)
+            login_result = await asyncio.to_thread(accounts.login, username.strip(), password, client_ip(request))
         if login_result is None:
             raise unauthorized()
         token, user_id = login_result
@@ -271,7 +271,7 @@ def create_api(bridge, key="", accounts=None):
         return web.json_response({"token": token})
 
     async def logout(request):
-        await asyncio.to_thread(accounts.logout, request["session_token"])
+        await asyncio.to_thread(accounts.logout, request["session_token"], client_ip(request))
         return web.Response(status=204)
 
     async def guilds(request):

@@ -120,3 +120,11 @@ sudo systemd-run --quiet --wait --pipe --collect --uid=ubuntu \
 | `maintenance status` | 현재 점검 상태를 확인합니다. |
 
 점검 중에는 앱 로그인·채팅 API·WebSocket이 차단됩니다. Discord 슬래시 명령은 계속 사용할 수 있습니다.
+
+## 앱 로그인·로그아웃 이력
+
+이 버전을 배포하기 전에 `discordbot`에 [db/002_app_session_log.sql](db/002_app_session_log.sql)을 적용합니다. `bot_log` 스키마가 이미 있어야 합니다.
+
+`bot_log.app_session_log`에는 로그인 성공, 직접 로그아웃, 관리자의 활성 세션 폐기를 기록합니다. 같은 세션의 이벤트는 내부 숫자 `session_id`로 연결할 수 있습니다. 관리자 폐기에는 사유를, 로그인과 로그아웃에는 접속 IP를 기록합니다. 비밀번호와 인증 토큰은 이 테이블에 저장하지 않습니다.
+
+앱 종료·세션 자동 복원은 기존 세션을 유지하고, 유휴 만료는 로그아웃 요청을 발생시키지 않습니다.

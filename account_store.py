@@ -55,18 +55,38 @@ class Accounts:
             return self.read_control(connection)
 
     @staticmethod
-    def _revoke_all_sessions(connection):
+    def _end_sessions(connection, event_type, *, user_id=None, digest=None, source_ip=None, reason=None):
+        result = connection.execute(
+            """WITH target AS (
+                   SELECT %s::bigint AS user_id, %s::bytea AS digest
+               ), ended AS (
+                   DELETE FROM bot_auth.app_sessions AS session
+                   USING target
+                   WHERE (target.user_id IS NULL OR session.user_id = target.user_id)
+                     AND (target.digest IS NULL OR session.token_hash = target.digest)
+                   RETURNING session.id, session.user_id, session.expires_at
+               )
+               INSERT INTO bot_log.app_session_log
+                   (event_type, app_user_id, session_id, source_ip, reason)
+               SELECT %s, user_id, id, %s::inet, %s
+               FROM ended
+               WHERE expires_at > now()""",
+            (user_id, digest, event_type, source_ip, reason),
+        )
+        return result.rowcount
+
+    def _revoke_all_sessions(self, connection, reason):
         # Lock the control row against login before deleting any sessions.
         result = connection.execute(
             "UPDATE bot_auth.app_control SET session_generation = session_generation + 1 WHERE singleton"
         )
         if result.rowcount != 1:
             raise psycopg.DatabaseError("The app control row is missing")
-        return connection.execute("DELETE FROM bot_auth.app_sessions").rowcount
+        return self._end_sessions(connection, "revoked", reason=reason)
 
     def revoke_all_sessions(self):
         with self.connect() as connection:
-            return self._revoke_all_sessions(connection)
+            return self._revoke_all_sessions(connection, "admin_revoke_all")
 
     def set_maintenance(self, enabled):
         with self.connect() as connection:
@@ -76,9 +96,9 @@ class Accounts:
             )
             if result.rowcount != 1:
                 raise psycopg.DatabaseError("The app control row is missing")
-            return self._revoke_all_sessions(connection) if enabled else 0
+            return self._revoke_all_sessions(connection, "maintenance") if enabled else 0
 
-    def login(self, username, password):
+    def login(self, username, password, source_ip=None):
         with self.connect() as connection:
             maintenance, _ = self.read_control(connection, lock=True)
             if maintenance:
@@ -95,9 +115,15 @@ class Accounts:
                 return None
             token = secrets.token_urlsafe(32)
             connection.execute(
-                """INSERT INTO bot_auth.app_sessions (user_id, token_hash, expires_at)
-                   VALUES (%s, %s, clock_timestamp() + interval '1 hour')""",
-                (row[0], token_hash(token)),
+                """WITH started AS (
+                       INSERT INTO bot_auth.app_sessions (user_id, token_hash, expires_at)
+                       VALUES (%s, %s, clock_timestamp() + interval '1 hour')
+                       RETURNING id, user_id
+                   )
+                   INSERT INTO bot_log.app_session_log
+                       (event_type, app_user_id, session_id, source_ip)
+                   SELECT 'login', user_id, id, %s::inet FROM started""",
+                (row[0], token_hash(token), source_ip),
             )
             return token, row[0]
 
@@ -136,12 +162,9 @@ class Accounts:
             ).fetchone()
             return row[0] if row is not None else None
 
-    def logout(self, token):
+    def logout(self, token, source_ip=None):
         with self.connect() as connection:
-            connection.execute(
-                "DELETE FROM bot_auth.app_sessions WHERE token_hash = %s",
-                (token_hash(token),),
-            )
+            self._end_sessions(connection, "logout", digest=token_hash(token), source_ip=source_ip)
 
     def create(self, username, password):
         digest = PASSWORDS.hash(password)
@@ -161,5 +184,5 @@ class Accounts:
             ).fetchone()
             if row is None:
                 return False
-            connection.execute("DELETE FROM bot_auth.app_sessions WHERE user_id = %s", (row[0],))
+            self._end_sessions(connection, "revoked", user_id=row[0], reason="password_reset")
             return True
