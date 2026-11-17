@@ -24,7 +24,7 @@ h2 { font-size: .95rem; margin: 0 0 .45rem; }
   display: grid; grid-template-columns: minmax(165px, 1fr) minmax(0, 2.4fr) minmax(190px, 1.25fr);
   grid-template-rows: auto minmax(0, 1fr);
 }
-.play-scroll { display: contents; }
+.play-scroll, .play-content { display: contents; }
 .status { grid-area: 1 / 2; text-align: center; padding: 0 8px 12px; font-size: 1.25rem; }
 time { font-variant-numeric: tabular-nums; }
 .status time { padding: .15em .55em; margin-left: .3em; background: var(--card); border-radius: 8px; }
@@ -109,7 +109,7 @@ label { white-space: nowrap; }
   .status { position: fixed; top: 0; left: 0; right: 0; height: calc(46px + env(safe-area-inset-top)); display: grid; place-items: center; padding: env(safe-area-inset-top) 9px 0; background: var(--bg); z-index: 5; font-size: 1rem; }
   #watch-count { display: block; position: absolute; right: max(12px,env(safe-area-inset-right)); bottom: 10px; }
   .play-scroll { display: block; position: fixed; top: calc(46px + env(safe-area-inset-top)); bottom: 0; inset-inline: 0; overflow: auto; }
-  .play-scroll::after { content: ""; display: block; height: var(--travel-pad, 40dvh); }
+  .play-content { display: block; height: calc(100% + 40dvh); overflow: clip; }
   .square { width: min(calc(100% - 20px), max(180px, 100dvh - 210px)); }
   .notice { margin: .25em 0; }
   .dots { display: block; color: var(--muted); line-height: 1; padding-bottom: .3em; }

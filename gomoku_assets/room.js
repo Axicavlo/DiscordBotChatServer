@@ -187,9 +187,7 @@ function placeChat() {
   const layoutHeight = ui.scroll.getBoundingClientRect().bottom;
   const scrollTop = ui.scroll.getBoundingClientRect().top;
   const peopleBottom = ui.people.getBoundingClientRect().bottom;
-  const content = peopleBottom + ui.scroll.scrollTop - scrollTop;
-  const maxTravel = layoutHeight * 0.4;
-  ui.scroll.style.setProperty("--travel-pad", `${Math.max(0, ui.scroll.clientHeight + maxTravel - content)}px`);
+
   ui.chat.style.setProperty("--chat-bottom", `${Math.max(0, layoutHeight - bottom)}px`);
   ui.chat.style.setProperty("--chat-top", `${Math.max(scrollTop, Math.min(peopleBottom, bottom - 75))}px`);
 }
