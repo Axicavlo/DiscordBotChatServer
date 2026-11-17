@@ -51,6 +51,7 @@ class Room:
     colors: dict[int, str] = field(default_factory=dict)
     remaining: dict[str, int] = field(default_factory=dict)
     board: tuple[int, ...] = EMPTY_BOARD
+    last_move: int | None = None
     turn: int = BLACK
     deadline: int = 0
     ended_at: int = 0
@@ -118,6 +119,7 @@ class Room:
         if status not in ("legal", "win"):
             return status
         self.board, _ = play(self.board, index, self.turn)
+        self.last_move = index
         self.remaining[member_id] = self.deadline - now
         if status == "win":
             self._finish(member_id, "five", now)

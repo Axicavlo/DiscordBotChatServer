@@ -70,6 +70,10 @@ label { white-space: nowrap; }
 .cell::before { content: ""; display: block; margin: auto; width: 84%; aspect-ratio: 1; border-radius: 50%; }
 .cell[data-stone="1"]::before, .stone.black { background: radial-gradient(circle at 35% 30%, #666, #08090a 72%); }
 .cell[data-stone="2"]::before, .stone.white { background: radial-gradient(circle at 35% 30%, #fff, #ddd 66%, #aaa); }
+.cell.last-move::after {
+  content: ""; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 23%; aspect-ratio: 1; border-radius: 50%; background: #f33240; pointer-events: none;
+}
 .cell.preview::before { outline: 2px dashed #34241d; outline-offset: -3px; }
 .cell.star:not([data-stone])::before { width: 16%; background: var(--grid); }
 .cell.preview::before { width: 80% !important; background: #fff5 !important; }

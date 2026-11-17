@@ -115,6 +115,7 @@ class GomokuWeb:
             "players": players,
             "spectators": [asdict(member) for member in room.spectators.values()],
             "board": room.board,
+            "last_move": room.last_move,
             "turn": room.active_player if room.phase == "playing" else None,
             "clocks": {key: ns / 1_000_000 for key, ns in room.clocks(now).items()},
             "result": asdict(room.result) if room.result else None,

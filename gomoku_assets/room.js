@@ -60,6 +60,7 @@ function renderBoard() {
     const stone = state.board[index];
     if (stone) cell.dataset.stone = stone;
     else delete cell.dataset.stone;
+    cell.classList.toggle("last-move", Boolean(stone) && index === state.last_move);
     cell.classList.toggle("preview", index === marker && !stone);
     cell.tabIndex = state.turn === member && !stone ? 0 : -1;
   });
@@ -153,7 +154,7 @@ function applyRoom(next) {
   document.querySelector(".exit").hidden = Boolean(state.result);
   update("people", [state.players, state.spectators, state.turn, state.mode, state.phase], renderPeople);
   update("messages", state.messages, renderMessages);
-  update("board", [state.board, state.turn, marker], renderBoard);
+  update("board", [state.board, state.turn, state.last_move, marker], renderBoard);
   if (waiting) update("lobby", [state.players, state.mode, state.seconds], () => renderLobby(me));
   if (state.result) update("result", state.result, renderResult);
   ui.connection.hidden = true;
