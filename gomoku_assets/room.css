@@ -104,9 +104,16 @@ label { white-space: nowrap; }
 .message { display: flex; gap: .55rem; padding: .55rem; margin: 0 0 .4rem; background: var(--card); border-radius: 8px; overflow-wrap: anywhere; }
 .message img { width: 32px; height: 32px; border-radius: 50%; background: var(--line); flex: none; }
 .message p { margin: .2rem 0 0; white-space: pre-wrap; }
-#composer { display: flex; gap: .35rem; align-items: end; padding-top: .55rem; }
-#message { width: 100%; min-width: 0; font: 11pt "Malgun Gothic","맑은 고딕",sans-serif; padding: .4rem; background: transparent; border: 0; border-bottom: 1px solid var(--line); resize: none; }
+#composer { position: relative; display: flex; gap: .35rem; align-items: end; padding-top: .55rem; }
+#message { width: 100%; min-width: 0; font: 11pt/1.4 "Malgun Gothic","맑은 고딕",sans-serif; padding: .35rem .4rem; max-height: calc(5.6em + .7rem + 1px); background: transparent; border: 0; border-bottom: 1px solid var(--line); resize: none; }
 .send { display: none; }
+.emoji-toggle { flex: none; display: grid; place-items: center; width: 36px; height: 36px; padding: 0; background: transparent; border: 0; border-radius: 7px; color: var(--muted); }
+.emoji-toggle:hover, .emoji-toggle[aria-expanded="true"] { background: var(--card); color: var(--fg); }
+.emoji-panel { position: absolute; z-index: 4; bottom: calc(100% + 6px); inset-inline: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(37px, 1fr)); gap: 3px; max-height: min(42dvh, 250px); overflow: auto; padding: 8px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); }
+.emoji-panel p { grid-column: 1 / -1; margin: .25rem; color: var(--muted); font-size: .88rem; }
+.emoji-panel button { display: grid; place-items: center; min-height: 37px; padding: 4px; background: transparent; border: 0; border-radius: 5px; }
+.emoji-panel button:hover { background: var(--card); }
+.emoji-panel img, .message img.custom-emoji { width: 1.35em; height: 1.35em; object-fit: contain; vertical-align: -.25em; border-radius: 0; background: transparent; }
 .connection { text-align: center; margin: 0; padding: 1rem; }
 @media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) {
   .room { padding: 0; display: block; overflow: hidden; }

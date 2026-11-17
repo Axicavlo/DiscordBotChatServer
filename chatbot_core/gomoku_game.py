@@ -22,6 +22,10 @@ class Member:
     id: str
     name: str
     avatar: str = ""
+    role_ids: frozenset[int] = frozenset()
+
+    def public(self):
+        return {"id": self.id, "name": self.name, "avatar": self.avatar}
 
 
 @dataclass(frozen=True)

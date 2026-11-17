@@ -86,9 +86,63 @@ function renderPeople() {
   ui.spectators.replaceChildren(...state.spectators.map(({name}) => node("li", name)));
 }
 
+function emojiImage(emoji) {
+  const image = node("img", undefined, "custom-emoji");
+  image.alt = `:${emoji.name}:`;
+  image.title = image.alt;
+  image.src = `https://cdn.discordapp.com/emojis/${emoji.id}.webp${emoji.animated ? "?animated=true" : ""}`;
+  return image;
+}
+
+function renderChatText(text, emojis) {
+  const body = node("p");
+  const allowed = new Map((emojis || []).map((emoji) => [emoji.id, emoji]));
+  let cursor = 0;
+  for (const match of text.matchAll(/<a?:[A-Za-z0-9_]{2,32}:([0-9]{1,20})>/g)) {
+    body.append(text.slice(cursor, match.index));
+    const emoji = allowed.get(match[1]);
+    body.append(emoji ? emojiImage(emoji) : match[0]);
+    cursor = match.index + match[0].length;
+  }
+  body.append(text.slice(cursor));
+  return body;
+}
+
+function showEmojiPanel(open) {
+  byId("emoji-panel").hidden = !open;
+  byId("emoji-toggle").setAttribute("aria-expanded", String(open));
+}
+
+function renderEmojiPicker(items) {
+  const panel = byId("emoji-panel");
+  if (panel.hidden) return;
+  panel.replaceChildren(...items.map((emoji) => {
+    const button = node("button");
+    button.type = "button";
+    button.title = emoji.name;
+    button.setAttribute("aria-label", emoji.name);
+    button.append(emojiImage(emoji));
+    button.addEventListener("click", () => {
+      const token = `<${emoji.animated ? "a" : ""}:${emoji.name}:${emoji.id}>`;
+      const input = ui.message;
+      const {selectionStart: first, selectionEnd: last, value, maxLength} = input;
+      if (value.length - (last - first) + token.length > maxLength) {
+        notice("메시지는 1,000자까지 입력할 수 있습니다.");
+        return;
+      }
+      input.setRangeText(token, first, last, "end");
+      resizeChatInput();
+      showEmojiPanel(false);
+      input.focus();
+    });
+    return button;
+  }));
+  if (!items.length) panel.append(node("p", "사용할 수 있는 서버 이모지가 없습니다."));
+}
+
 function renderMessages() {
   const nearEnd = ui.messages.scrollHeight - ui.messages.scrollTop - ui.messages.clientHeight < 45;
-  ui.messages.replaceChildren(...state.messages.map(({member: sender, text}) => {
+  ui.messages.replaceChildren(...state.messages.map(({member: sender, text, emojis}) => {
     const block = node("div", undefined, "message");
     if (sender.avatar) {
       const avatar = node("img");
@@ -97,7 +151,7 @@ function renderMessages() {
       block.append(avatar);
     }
     const body = node("div");
-    body.append(node("strong", sender.name), node("p", text));
+    body.append(node("strong", sender.name), renderChatText(text, emojis));
     block.append(body);
     return block;
   }));
@@ -158,8 +212,10 @@ function applyRoom(next) {
   if (waiting) update("lobby", [state.players, state.mode, state.seconds], () => renderLobby(me));
   if (state.result) update("result", state.result, renderResult);
   ui.connection.hidden = true;
+  const wasHidden = ui.room.hidden;
   ui.room.hidden = false;
-  placeChat();
+  if (wasHidden) resizeChatInput();
+  else placeChat();
 }
 
 function formatTime(ms, precise) {
@@ -190,11 +246,22 @@ function placeChat() {
   const peopleBottom = ui.people.getBoundingClientRect().bottom;
 
   ui.chat.style.setProperty("--chat-bottom", `${Math.max(0, layoutHeight - bottom)}px`);
-  ui.chat.style.setProperty("--chat-top", `${Math.max(scrollTop, Math.min(peopleBottom, bottom - 75))}px`);
+  const chatMinimum = Math.max(75, ui.composer.offsetHeight + 36);
+  ui.chat.style.setProperty("--chat-top", `${Math.max(scrollTop, Math.min(peopleBottom, bottom - chatMinimum))}px`);
 }
 
 ui.scroll.addEventListener("scroll", placeChat, {passive: true});
-window.addEventListener("resize", placeChat);
+function resizeChatInput() {
+  if (ui.room.hidden) return;
+  const input = ui.message;
+  input.style.height = "auto";
+  const border = input.offsetHeight - input.clientHeight;
+  input.style.height = `${input.scrollHeight + border}px`;
+  placeChat();
+}
+
+ui.message.addEventListener("input", resizeChatInput);
+window.addEventListener("resize", resizeChatInput);
 window.visualViewport?.addEventListener("resize", placeChat);
 window.visualViewport?.addEventListener("scroll", placeChat);
 
@@ -215,6 +282,7 @@ function handle(data) {
   if (intentionalClose) return;
   if (data.type === "identity") member = data.member;
   else if (data.type === "room") applyRoom(data);
+  else if (data.type === "emojis") renderEmojiPicker(data.items);
   else if (data.type === "closed") finish("방이 종료되었습니다.");
   else if (data.type === "error") notice(data.message);
   else if (data.type === "preview" && data.index === requested) {
@@ -270,10 +338,30 @@ ui.ready.addEventListener("click", () => transmit("ready"));
 ui.close.addEventListener("click", () => transmit("close"));
 document.querySelector(".exit").addEventListener("click", leave);
 
+byId("emoji-toggle").addEventListener("click", () => {
+  const panel = byId("emoji-panel");
+  const open = panel.hidden;
+  showEmojiPanel(open);
+  if (open) {
+    panel.replaceChildren(node("p", transmit("emojis") ? "불러오는 중…" : "서버에 연결하는 중입니다."));
+  }
+});
+document.addEventListener("click", (event) => {
+  if (!ui.composer.contains(event.target)) showEmojiPanel(false);
+});
+ui.composer.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !byId("emoji-panel").hidden) {
+    showEmojiPanel(false);
+    byId("emoji-toggle").focus();
+  }
+});
 let pendingCompositionSend = false;
 function sendChat() {
   const text = ui.message.value;
-  if (text.trim() && transmit("chat", {text})) ui.message.value = "";
+  if (text.trim() && transmit("chat", {text})) {
+    ui.message.value = "";
+    resizeChatInput();
+  }
 }
 ui.composer.addEventListener("submit", (event) => {
   event.preventDefault();

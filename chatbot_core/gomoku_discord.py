@@ -19,7 +19,8 @@ REASONS = {
 
 
 def _member(user):
-    return Member(str(user.id), user.display_name, str(user.display_avatar.url))
+    roles = frozenset(role.id for role in getattr(user, "roles", ()))
+    return Member(str(user.id), user.display_name, str(user.display_avatar.url), roles)
 
 
 def _name(member):
@@ -57,6 +58,7 @@ class GomokuDiscord:
         self.public_url = public_url.rstrip("/")
         self.rooms = rooms
         self.cards = {}
+        self.client = None
         group = app_commands.Group(name="오목", description="웹 오목", guild_only=True)
         group.add_command(app_commands.Command(
             name="방만들기", description="웹 오목 방을 만듭니다.", callback=self.create
@@ -65,6 +67,19 @@ class GomokuDiscord:
 
     def register(self, tree):
         tree.add_command(self.command)
+        self.client = tree.client
+
+    def emojis_for(self, room, member):
+        guild = self.client.get_guild(int(room.guild_id)) if self.client else None
+        if guild is None:
+            return []
+        current = guild.get_member(int(member.id))
+        roles = {role.id for role in current.roles} if current else member.role_ids
+        return [
+            {"id": str(emoji.id), "name": emoji.name, "animated": emoji.animated}
+            for emoji in guild.emojis
+            if emoji.available and (not emoji.roles or any(role.id in roles for role in emoji.roles))
+        ]
 
     def _card(self, room):
         embed = discord.Embed(title="오목", colour=0x257A3E)

@@ -56,7 +56,9 @@
     </header>
     <div id="messages" class="messages" role="log" aria-label="채팅 메시지"></div>
     <form id="composer">
-      <textarea id="message" placeholder="메시지 입력" aria-label="메시지 입력" maxlength="1000" rows="2"></textarea>
+      <div id="emoji-panel" class="emoji-panel" role="group" aria-label="서버 이모지" hidden></div>
+      <button id="emoji-toggle" class="emoji-toggle" type="button" aria-label="서버 이모지" aria-controls="emoji-panel" aria-expanded="false"><svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M8 13.5a4.5 4.5 0 0 0 8 0M9 9.5h.01m5.98 0H15"/></svg></button>
+      <textarea id="message" placeholder="메시지 입력" aria-label="메시지 입력" maxlength="1000" rows="1"></textarea>
       <button class="send" type="submit">전송</button>
     </form>
   </aside>

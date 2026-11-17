@@ -5,6 +5,7 @@ from collections import defaultdict, deque
 from dataclasses import asdict
 import logging
 from pathlib import Path
+import re
 from secrets import token_urlsafe
 
 from aiohttp import WSMsgType, web
@@ -14,6 +15,7 @@ from chatbot_core.gomoku_game import RoomError, SECOND, TIME_OPTIONS
 logger = logging.getLogger(__name__)
 ROOM_PATH = r"/gomoku/{room_id:[0-9a-f-]{36}}"
 COOKIE = "gomoku_session"
+EMOJI_TOKEN = re.compile(r"<a?:[A-Za-z0-9_]{2,32}:([0-9]{1,20})>")
 ASSETS = Path(__file__).with_name("gomoku_assets")
 HEADERS = {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"}
 
@@ -97,7 +99,7 @@ class GomokuWeb:
     def _snapshot(self, room, now):
         players = []
         for player in room.players.values():
-            data = asdict(player)
+            data = player.public()
             data["ready"] = player.id in room.ready
             data["preference"] = room.preferences.get(player.id)
             data["color"] = next((color for color, member in room.colors.items() if member == player.id), None)
@@ -113,7 +115,7 @@ class GomokuWeb:
             "seconds": room.seconds,
             "time_options": TIME_OPTIONS,
             "players": players,
-            "spectators": [asdict(member) for member in room.spectators.values()],
+            "spectators": [member.public() for member in room.spectators.values()],
             "board": room.board,
             "last_move": room.last_move,
             "turn": room.active_player if room.phase == "playing" else None,
@@ -186,6 +188,9 @@ class GomokuWeb:
         action = data.get("type")
         if room.phase == "closed" or member_id in room.departed:
             raise RoomError("종료된 방입니다.")
+        if action == "emojis":
+            member = room.players.get(member_id) or room.spectators.get(member_id)
+            return {"type": "emojis", "items": self._emojis_for(room, member)}
         if action == "preview":
             return {"type": "preview", "index": data["index"],
                     "status": room.preview(member_id, data["index"], now)}
@@ -220,7 +225,13 @@ class GomokuWeb:
         if now - self.last_chat.get(key, -SECOND) < SECOND // 2:
             raise RoomError("잠시 후에 메시지를 보내세요.")
         self.last_chat[key] = now
-        self.messages[room.id].append({"member": asdict(member), "text": text.strip()})
+        text = text.strip()
+        ids = set(EMOJI_TOKEN.findall(text))
+        emojis = [emoji for emoji in self._emojis_for(room, member) if emoji["id"] in ids] if ids else []
+        self.messages[room.id].append({"member": member.public(), "text": text, "emojis": emojis})
+
+    def _emojis_for(self, room, member):
+        return self.discord.emojis_for(room, member) if member is not None else []
 
     def _spawn(self, key, operation, *args):
         if key not in self.jobs:
