@@ -42,7 +42,7 @@ class RoomCard(discord.ui.View):
     async def watch(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.service.enter(interaction, self.room, "spectator")
 
-    @discord.ui.button(label="방 종료", style=discord.ButtonStyle.danger, custom_id="gomoku:close")
+    @discord.ui.button(label="방 닫기", style=discord.ButtonStyle.danger, custom_id="gomoku:close")
     async def close_room(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.service.close(interaction, self.room)
 

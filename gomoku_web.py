@@ -4,6 +4,7 @@ import asyncio
 from collections import defaultdict, deque
 from dataclasses import asdict
 import logging
+from pathlib import Path
 from secrets import token_urlsafe
 
 from aiohttp import WSMsgType, web
@@ -13,6 +14,7 @@ from chatbot_core.gomoku_game import RoomError, SECOND, TIME_OPTIONS
 logger = logging.getLogger(__name__)
 ROOM_PATH = r"/gomoku/{room_id:[0-9a-f-]{36}}"
 COOKIE = "gomoku_session"
+ASSETS = Path(__file__).with_name("gomoku_assets")
 HEADERS = {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"}
 
 
@@ -32,10 +34,26 @@ class GomokuWeb:
         self.jobs = {}
 
     def register(self, app):
+        app.router.add_get(ROOM_PATH, self.page)
+        app.router.add_get("/gomoku/assets/{filename:room[.](js|css)}", self.asset)
         app.router.add_post(ROOM_PATH + "/admit", self.admit)
         app.router.add_get(ROOM_PATH + "/events", self.events, allow_head=False)
         app.cleanup_ctx.append(self.lifecycle)
         app.on_shutdown.append(self.shutdown)
+
+    async def page(self, request):
+        self._room(request)
+        headers = {
+            **HEADERS,
+            "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; "
+                                       "img-src 'self' https://cdn.discordapp.com; "
+                                       f"connect-src 'self' {self.discord.public_url.replace('https:', 'wss:', 1)}; "
+                                       "frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+        }
+        return web.FileResponse(ASSETS / "room.html", headers=headers)
+
+    async def asset(self, request):
+        return web.FileResponse(ASSETS / request.match_info["filename"], headers=HEADERS)
 
     def _origin(self, request):
         if request.headers.get("Origin") != self.discord.public_url:

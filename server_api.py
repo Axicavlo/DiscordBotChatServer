@@ -165,7 +165,7 @@ class ApiRequestLog:
         await writer
 
 
-def create_api(bridge, key="", accounts=None):
+def create_api(bridge, key="", accounts=None, gomoku=None):
     expected = f"Bearer {key}".encode("utf-8")
     login_slots = asyncio.Semaphore(2)
     request_limits = RequestLimits()
@@ -184,6 +184,8 @@ def create_api(bridge, key="", accounts=None):
         token = ""
         expires_at = None
         path = request.path
+        if gomoku is not None and path.startswith("/gomoku/"):
+            return await handler(request)
         method = request.method
         logout_request = path == "/api/v1/auth/logout" and method == "POST"
         login_request = path == "/api/v1/auth/login" and method == "POST"
@@ -447,12 +449,14 @@ def create_api(bridge, key="", accounts=None):
     app.router.add_patch(item_path, edit_message)
     app.router.add_delete(item_path, delete_message)
     app.router.add_get("/api/v1/events", stream, allow_head=False)
+    if gomoku is not None:
+        gomoku.register(app)
     app.on_shutdown.append(close_streams)
     return app
 
 
-async def start_api(bridge, key, accounts):
-    runner = web.AppRunner(create_api(bridge, key, accounts), access_log=None)
+async def start_api(bridge, key, accounts, gomoku=None):
+    runner = web.AppRunner(create_api(bridge, key, accounts, gomoku), access_log=None)
     await runner.setup()
     try:
         await web.TCPSite(runner, "127.0.0.1", 8765).start()

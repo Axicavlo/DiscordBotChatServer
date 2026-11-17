@@ -8,6 +8,10 @@ import signal
 
 from account_store import Accounts, database_settings
 from chatbot_core import Bridge, safe_error
+from chatbot_core.gomoku_discord import GomokuDiscord
+from chatbot_core.gomoku_game import Rooms
+from gomoku_store import GomokuStore
+from gomoku_web import GomokuWeb
 from server_api import start_api
 
 logger = logging.getLogger(__name__)
@@ -49,11 +53,20 @@ async def run_bot(token, state_dir, api_key="", accounts=None):
     loop = asyncio.get_running_loop()
     bridge = Bridge(ServerEvents(), state_dir=state_dir)
     bridge.worker_loop = loop
+    public_url = os.environ.get("GOMOKU_PUBLIC_URL", "").strip()
+    gomoku = None
+    if public_url:
+        if accounts is None:
+            raise RuntimeError("Gomoku requires PostgreSQL configuration")
+        rooms = Rooms()
+        discord = GomokuDiscord(rooms, public_url)
+        discord.register(bridge.tournaments.tree)
+        gomoku = GomokuWeb(rooms, discord, GomokuStore(accounts.connect))
     if os.name != "nt":
         loop.add_signal_handler(signal.SIGTERM, asyncio.current_task().cancel)
     try:
         async with bridge:
-            api = await start_api(bridge, api_key, accounts) if api_key or accounts else None
+            api = await start_api(bridge, api_key, accounts, gomoku) if api_key or accounts else None
             try:
                 await bridge.start(token)
             finally:
