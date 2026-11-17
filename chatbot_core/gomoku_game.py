@@ -191,12 +191,15 @@ class Room:
 class Rooms:
     """Owns room capacity and consumes Discord-issued tickets atomically."""
 
-    def __init__(self, clock=monotonic_ns):
+    def __init__(self, clock=monotonic_ns, draining=lambda: False):
         self.clock = clock
+        self.draining = draining
         self.rooms = {}
         self.tickets = {}
 
     def create(self, guild_id, host):
+        if self.draining():
+            raise RoomError("서버 배포 중입니다. 잠시 후 방을 만들어 주세요.")
         now = self.clock()
         self._check_player_room(host.id, now)
         room = Room(guild_id, host, now)

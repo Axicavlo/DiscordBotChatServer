@@ -58,10 +58,10 @@ async def run_bot(token, state_dir, api_key="", accounts=None):
     if public_url:
         if accounts is None:
             raise RuntimeError("Gomoku requires PostgreSQL configuration")
-        rooms = Rooms()
+        rooms = Rooms(draining=Path("/run/discord-bot-deploy/drain").exists)
         discord = GomokuDiscord(rooms, public_url)
         discord.register(bridge.tournaments.tree)
-        gomoku = GomokuWeb(rooms, discord, GomokuStore(accounts.connect))
+        gomoku = GomokuWeb(rooms, discord, GomokuStore(accounts.connect), ready=bridge.is_ready)
     if os.name != "nt":
         loop.add_signal_handler(signal.SIGTERM, asyncio.current_task().cancel)
     try:

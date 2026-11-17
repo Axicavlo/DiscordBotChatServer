@@ -1,0 +1,10 @@
+[Unit]
+Description=Check for CI-verified Discord bot updates
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=2min
+AccuracySec=15s
+
+[Install]
+WantedBy=timers.target

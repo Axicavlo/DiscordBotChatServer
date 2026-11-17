@@ -16,6 +16,7 @@ from aiohttp import web
 from psycopg import Error as DatabaseError
 
 from account_store import MaintenanceActive
+from gomoku_web import DEPLOY_STATUS_PATH
 from chatbot_core import asset_url, avatar_url, message_view, server_display_name
 
 
@@ -184,7 +185,7 @@ def create_api(bridge, key="", accounts=None, gomoku=None):
         token = ""
         expires_at = None
         path = request.path
-        if gomoku is not None and path.startswith("/gomoku/"):
+        if gomoku is not None and (path.startswith("/gomoku/") or path == DEPLOY_STATUS_PATH):
             return await handler(request)
         method = request.method
         logout_request = path == "/api/v1/auth/logout" and method == "POST"

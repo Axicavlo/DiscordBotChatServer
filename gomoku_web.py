@@ -14,6 +14,7 @@ from chatbot_core.gomoku_game import RoomError, SECOND, TIME_OPTIONS
 
 logger = logging.getLogger(__name__)
 ROOM_PATH = r"/gomoku/{room_id:[0-9a-f-]{36}}"
+DEPLOY_STATUS_PATH = "/internal/gomoku/deploy-status"
 COOKIE = "gomoku_session"
 EMOJI_TOKEN = re.compile(r"<a?:[A-Za-z0-9_]{2,32}:([0-9]{1,20})>")
 ASSETS = Path(__file__).with_name("gomoku_assets")
@@ -21,10 +22,11 @@ HEADERS = {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"}
 
 
 class GomokuWeb:
-    def __init__(self, rooms, discord, store):
+    def __init__(self, rooms, discord, store, ready=lambda: True):
         self.rooms = rooms
         self.discord = discord
         self.store = store
+        self.ready = ready
         self.sessions = defaultdict(dict)
         self.sockets = defaultdict(dict)
         self.messages = defaultdict(lambda: deque(maxlen=100))
@@ -36,12 +38,24 @@ class GomokuWeb:
         self.jobs = {}
 
     def register(self, app):
+        app.router.add_get(DEPLOY_STATUS_PATH, self.deploy_status)
         app.router.add_get(ROOM_PATH, self.page)
         app.router.add_get("/gomoku/assets/{filename:room[.](js|css)}", self.asset)
         app.router.add_post(ROOM_PATH + "/admit", self.admit)
         app.router.add_get(ROOM_PATH + "/events", self.events, allow_head=False)
         app.cleanup_ctx.append(self.lifecycle)
         app.on_shutdown.append(self.shutdown)
+
+    async def deploy_status(self, request):
+        peer = request.transport.get_extra_info("peername") if request.transport else None
+        if not peer or peer[0] not in ("127.0.0.1", "::1"):
+            raise web.HTTPNotFound(headers=HEADERS)
+        self.rooms.tick()
+        return web.json_response({
+            "ready": self.ready(),
+            "draining": self.rooms.draining(),
+            "rooms": sum(room.phase != "closed" for room in self.rooms.rooms.values()),
+        }, headers=HEADERS)
 
     async def page(self, request):
         self._room(request)
