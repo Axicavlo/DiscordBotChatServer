@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 from secrets import token_urlsafe
 
-from aiohttp import WSMsgType, web
+from aiohttp import ClientSession, ClientTimeout, WSMsgType, web
 
 from chatbot_core.gomoku_game import RoomError, SECOND, TIME_OPTIONS
 
@@ -43,6 +43,11 @@ class GomokuWeb:
         app.router.add_get("/gomoku/assets/{filename:room[.](js|css)}", self.asset)
         app.router.add_post(ROOM_PATH + "/admit", self.admit)
         app.router.add_get(ROOM_PATH + "/events", self.events, allow_head=False)
+        if self.discord.activity_id:
+            app.router.add_get("/gomoku/activity", self.activity_page)
+            app.router.add_get("/gomoku/activity/", self.activity_page)
+            app.router.add_get("/gomoku/activity.js", self.activity_script)
+            app.router.add_post("/gomoku/activity/admit", self.activity_admit)
         app.cleanup_ctx.append(self.lifecycle)
         app.on_shutdown.append(self.shutdown)
 
@@ -57,14 +62,65 @@ class GomokuWeb:
             "rooms": sum(room.phase != "closed" for room in self.rooms.rooms.values()),
         }, headers=HEADERS)
 
+    async def activity_page(self, request):
+        return web.Response(
+            text='<!doctype html><html lang="ko"><meta charset="utf-8">'
+                 '<title>오목</title><p role="status">디스코드에 연결하는 중입니다.</p>'
+                 '<script type="module" src="/gomoku/activity.js"></script></html>',
+            content_type="text/html",
+            headers={**HEADERS, "Content-Security-Policy":
+                     "default-src 'none'; script-src 'self'; connect-src 'self'; "
+                     "frame-ancestors https://discord.com https://*.discord.com; base-uri 'none'"},
+        )
+
+    async def activity_script(self, request):
+        return web.FileResponse(ASSETS / "activity.bundle.js", headers=HEADERS)
+
+    async def activity_admit(self, request):
+        if request.headers.get("Origin") != self.discord.activity_origin:
+            raise web.HTTPForbidden(headers=HEADERS)
+        try:
+            data = await request.json()
+            code, instance = data["code"], data["instance"]
+            if not all(isinstance(value, str) and 0 < len(value) <= 256
+                       for value in (code, instance)):
+                raise ValueError
+        except (KeyError, ValueError, TypeError):
+            raise web.HTTPBadRequest(headers=HEADERS)
+        async with ClientSession(timeout=ClientTimeout(total=8)) as client:
+            async with client.post("https://discord.com/api/v10/oauth2/token", data={
+                "client_id": self.discord.activity_id,
+                "client_secret": self.discord.activity_secret,
+                "grant_type": "authorization_code",
+                "code": code,
+            }) as response:
+                if response.status != 200:
+                    raise web.HTTPUnauthorized(headers=HEADERS)
+                token = (await response.json())["access_token"]
+            async with client.get("https://discord.com/api/v10/users/@me",
+                                  headers={"Authorization": f"Bearer {token}"}) as response:
+                if response.status != 200:
+                    raise web.HTTPUnauthorized(headers=HEADERS)
+                member_id = (await response.json())["id"]
+        entry = self.discord.activity_entries.pop((instance, member_id), None)
+        if entry is None or entry[0] <= self.rooms.clock():
+            raise web.HTTPForbidden(headers=HEADERS)
+        _, room_id, ticket = entry
+        return web.json_response({"room": room_id, "ticket": ticket}, headers=HEADERS)
+
     async def page(self, request):
         self._room(request)
+        ws_origin = self.discord.public_url.replace("https:", "wss:", 1)
+        if self.discord.activity_origin:
+            ws_origin = self.discord.activity_origin.replace("https:", "wss:", 1)
         headers = {
             **HEADERS,
             "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; "
                                        "img-src 'self' https://cdn.discordapp.com; "
-                                       f"connect-src 'self' {self.discord.public_url.replace('https:', 'wss:', 1)}; "
-                                       "frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+                                       f"connect-src 'self' {ws_origin}; "
+                                       + ("frame-ancestors https://discord.com https://*.discord.com; "
+                                          if self.discord.activity_id else "frame-ancestors 'none'; ")
+                                       + "base-uri 'none'; form-action 'self'",
         }
         return web.FileResponse(ASSETS / "room.html", headers=headers)
 
@@ -72,7 +128,10 @@ class GomokuWeb:
         return web.FileResponse(ASSETS / request.match_info["filename"], headers=HEADERS)
 
     def _origin(self, request):
-        if request.headers.get("Origin") != self.discord.public_url:
+        allowed = {self.discord.public_url}
+        if self.discord.activity_origin:
+            allowed.add(self.discord.activity_origin)
+        if request.headers.get("Origin") not in allowed:
             raise web.HTTPForbidden(headers=HEADERS)
 
     def _room(self, request):
@@ -106,8 +165,14 @@ class GomokuWeb:
         session = token_urlsafe(32)
         sessions[session] = member.id
         response = web.json_response({"member": member.id}, headers=HEADERS)
-        response.set_cookie(COOKIE, session, path=f"/gomoku/{room.id}",
-                            secure=True, httponly=True, samesite="Strict")
+        if self.discord.activity_origin and request.headers.get("Origin") == self.discord.activity_origin:
+            response.headers.add(
+                "Set-Cookie", f"{COOKIE}={session}; Path=/gomoku/{room.id}; "
+                "Secure; HttpOnly; SameSite=None; Partitioned",
+            )
+        else:
+            response.set_cookie(COOKIE, session, path=f"/gomoku/{room.id}",
+                                secure=True, httponly=True, samesite="Strict")
         return response
 
     def _snapshot(self, room, now):

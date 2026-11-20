@@ -147,3 +147,19 @@ SQL 적용을 확인한 후 새 서버 버전을 배포하고 봇 서비스를 �
 - HTTPS 프록시는 `/gomoku/` 아래 HTTP 요청과 WebSocket 업그레이드를 기존 서버봇의 `127.0.0.1:8765`로 전달한다. 브라우저의 Origin 헤더를 유지하고, 외부 이용자의 PC와 모바일에서 이 HTTPS 주소에 접속할 수 있어야 한다.
 - 서버봇 PostgreSQL 환경 설정을 사용한다. `db/005_gomoku.sql` 반영 여부와 서비스 DB 역할의 `gomoku` 스키마 USAGE, `gomoku.record` SELECT·INSERT 권한을 확인한다.
 - 서비스를 시작한 뒤 테스트 서버에서 `/오목 방만들기`를 실행한다. 두 계정으로 참가와 재입장, 관전자 착수 제한, 대국 종료 후 결과 저장과 모드별 전적을 확인한다.
+
+## Discord Activity 오목
+
+1. 기존 서버봇과 같은 Discord Developer Portal 애플리케이션에서 Activities를 활성화한다.
+2. URL Mappings에 두 항목을 설정한다. 대상은 기존 오목의 공개 HTTPS 호스트이며 Portal 형식에 맞춰 스킴은 생략한다.
+   - `/` → `<오목 HTTPS 호스트>/gomoku/activity`
+   - `/gomoku` → `<오목 HTTPS 호스트>/gomoku`
+3. 서버 환경 변수에 같은 애플리케이션의 `GOMOKU_ACTIVITY_CLIENT_ID`와 `GOMOKU_ACTIVITY_CLIENT_SECRET`을 설정한다. 두 변수를 비워 두면 기존 웹 입장 방식으로 동작한다. 비밀 값은 클라이언트나 Git에 넣지 않는다.
+4. 같은 서버에서 두 계정으로 방 카드의 참가를 누르고 착수·채팅을 확인한다. 별도 계정으로 관전을 확인한다. App Launcher로 직접 실행하면 방 카드에서 입장해야 한다는 안내가 표시된다.
+
+번들을 다시 만들 때는 임시 디렉터리에 `gomoku_assets/activity.js`를 복사한 뒤 아래를 실행하고, 출력된 `activity.bundle.js`를 `gomoku_assets`에 복사한다.
+
+```sh
+npm install --save-exact @discord/embedded-app-sdk@2.5.0 esbuild@0.28.2
+npx esbuild activity.js --bundle --format=esm --minify --legal-comments=inline --outfile=activity.bundle.js
+```

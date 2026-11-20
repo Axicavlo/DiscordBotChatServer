@@ -6,7 +6,7 @@ from urllib.parse import urlsplit
 import discord
 from discord import app_commands
 
-from .gomoku_game import Member, RoomError
+from .gomoku_game import Member, RoomError, SECOND
 
 logger = logging.getLogger(__name__)
 NO_MENTIONS = discord.AllowedMentions.none()
@@ -49,7 +49,7 @@ class RoomCard(discord.ui.View):
 
 
 class GomokuDiscord:
-    def __init__(self, rooms, public_url):
+    def __init__(self, rooms, public_url, activity_id="", activity_secret=""):
         parsed = urlsplit(public_url)
         if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
             raise ValueError("Gomoku requires an HTTPS public origin")
@@ -57,6 +57,10 @@ class GomokuDiscord:
             raise ValueError("Gomoku public URL must be an origin")
         self.public_url = public_url.rstrip("/")
         self.rooms = rooms
+        self.activity_id = activity_id
+        self.activity_secret = activity_secret
+        self.activity_origin = f"https://{activity_id}.discordsays.com" if activity_id else ""
+        self.activity_entries = {}
         self.cards = {}
         self.client = None
         group = app_commands.Group(name="오목", description="웹 오목", guild_only=True)
@@ -124,7 +128,10 @@ class GomokuDiscord:
             raise
 
         self.cards[room.id] = (message, view)
-        await self.enter(interaction, room, "player")
+        if self.activity_id:
+            await self._private(interaction, "방 카드에서 참가를 눌러 오목을 시작하세요.")
+        else:
+            await self.enter(interaction, room, "player")
 
     async def enter(self, interaction, room, role):
         try:
@@ -133,6 +140,20 @@ class GomokuDiscord:
             )
         except RoomError as error:
             await self._private(interaction, str(error))
+            return
+        if self.activity_id:
+            callback = await interaction.response.launch_activity()
+            instance = callback.activity_id or getattr(callback.resource, "id", None)
+            if not instance:
+                logger.warning("Discord did not return a Gomoku Activity instance")
+                return
+            now = self.rooms.clock()
+            self.activity_entries = {
+                key: entry for key, entry in self.activity_entries.items() if entry[0] > now
+            }
+            self.activity_entries[(instance, str(interaction.user.id))] = (
+                now + 30 * SECOND, room.id, ticket
+            )
             return
         link = discord.ui.View()
         link.add_item(discord.ui.Button(

@@ -59,7 +59,11 @@ async def run_bot(token, state_dir, api_key="", accounts=None):
         if accounts is None:
             raise RuntimeError("Gomoku requires PostgreSQL configuration")
         rooms = Rooms(draining=Path("/run/discord-bot-deploy/drain").exists)
-        discord = GomokuDiscord(rooms, public_url)
+        activity_id = os.environ.get("GOMOKU_ACTIVITY_CLIENT_ID", "").strip()
+        activity_secret = os.environ.get("GOMOKU_ACTIVITY_CLIENT_SECRET", "").strip()
+        if bool(activity_id) != bool(activity_secret) or (activity_id and not activity_id.isdecimal()):
+            raise ValueError("Configure both Gomoku Activity OAuth credentials")
+        discord = GomokuDiscord(rooms, public_url, activity_id, activity_secret)
         discord.register(bridge.tournaments.tree)
         gomoku = GomokuWeb(rooms, discord, GomokuStore(accounts.connect), ready=bridge.is_ready)
     if os.name != "nt":
